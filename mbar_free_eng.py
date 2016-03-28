@@ -12,35 +12,27 @@ if __name__ == "__main__":
     kb = .0083145 #kJ/mol*K
 
     # Temps being considered
-    temps = [ x.rstrip("\n") for x in open("short_temps_about_melt", "r").rea
+    temps = [ x.rstrip("\n") for x in open("short_temps_about_melt", "r").readlines() ]
+    
+    stride = 100
 
     # Read Q files
-    Q = [np.loadtxt("{}_0/Q.dat".format(x.rstrip("\n"))) for x in temps ]
-    
-    #this is acceptable because all Q calculations have same length
-    num_frames = len(Q[0])
+    Q = np.array([np.loadtxt("{}_0/Q.dat".format(x.rstrip("\n")))[::stride] for x in temps ])
+    Q_long = np.concatenate(Q)
    
     # Make my histogram thingy 
     numbins = 100
 
-    bin_n = np.zeros((len(Q), numbins),float)
-    bin_p = np.zeros((len(Q), numbins),float)
-    bin_edges = np.zeros((len(Q), numbins+1))
-    bin_mid = np.zeros((len(Q), numbins))
-
-    for i in range(len(Q)):
-        (bin_n[i] , bin_edges[i]) = np.histogram(Q[i], bins = numbins)
-        bin_p[i] = bin_n[i]/len(Q[0])
-        bin_mid[i] = .5*(bin_edges[i][1:] + bin_edges[i][:-1])
-
-
-
+    (bin_n , bin_edges) = np.histogram(Q_long, bins = numbins)
+    bin_p = bin_n/len(Q_long)
+    bin_mid= .5*(bin_edges[1:] + bin_edges[:-1])
+ 
      # Turn list of temperatures into array of floats with a set step size
     step_size = .01
-    T = np.arange(int(temps[0]),int(temps[len(temps)-1])+step_size,step_size)
+    T = np.arange(float(temps[0]),float(temps[len(temps)-1])+step_size,step_size)
 
     # Get energies from Etot.xvg files use these to create vector N_k
-    energies = [ np.loadtxt("{}_0/Etot.xvg".format(x), usecols=[1]) for x in
+    energies = [ np.loadtxt("{}_0/Etot.xvg".format(x), usecols=[1])[::stride] for x in temps ]
     N_k = np.zeros(len(T))
     iter = 0
     for i in range(len(T)):
@@ -55,14 +47,24 @@ if __name__ == "__main__":
     # Beta for calculating reduced potentials
     B = 1/(kb*T)
 
+    u_kn = np.zeros((len(T),len(Etot)))
+
     # for loop to fill in u_kn
     for i in range(len(T)):
         B = 1/(kb*T[i])
         u_kn[i] = Etot*B
-    
+ 
     # Initialize mbar
     mbar = pymbar.MBAR(u_kn, N_k)
 
+    Q_avg = np.zeros((len(T),numbins),float)
+    dQ_avg = np.zeros((len(T),numbins),float)
+
+    #for i in range(len(bin_edges)-1):
+    for i in [10]:
+        h = (Q_long > bin_edges[i]) & (Q_long < bin_edges[i+1])
+        Q_avg[:,i], dQ_avg[:,i] = mbar.computeExpectations(h.astype(int))
+     
 
 
 
