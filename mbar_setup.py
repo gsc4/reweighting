@@ -70,11 +70,11 @@ def temp_series_u_kn_N_k(temps, energies, Etot, step_size):
     
     # Construct N_k
     N_k = np.zeros(len(T))
-    iter = 0
+    count = 0
     for i in range(len(T)):
         if np.isclose(T[i], np.array(temps, float)).any():
-            N_k[i] = len(energies[iter])
-            iter += 1
+            N_k[i] = len(energies[count])
+            count += 1
         else:
             None #since N_k is initialzed to 0
     
