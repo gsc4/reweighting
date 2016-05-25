@@ -13,5 +13,9 @@ if __name__ == "__main__":
 
     temps = read_filenames( 'short_temps' , '../../scratch/SH3.constant.temp/test_melt/0_initial_data/')
 
-    
+    print 'reading data'
+
+    read_data(temps, '
+
+    print 'turn up' 
 
