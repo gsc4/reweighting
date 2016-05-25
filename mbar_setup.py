@@ -3,6 +3,9 @@ import numpy as np
 import model_builder as mdb
 import simulation.calc.observables as observables
 import pymbar
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 global kb_kJ_mol
 kb_KJ_mol = .0083145
