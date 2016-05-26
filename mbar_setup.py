@@ -3,6 +3,8 @@ import numpy as np
 import model_builder as mdb
 import simulation.calc.observables as observables
 import pymbar
+import mdtraj as md
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -98,7 +100,7 @@ def temp_series_u_kn_N_k(temps, energies, Etot, step_size):
         B = 1/(kb_KJ_mol*T[i])
         u_kn[i] = Etot*B
     
-    return N_k, u_kn, T
+    return u_kn, N_k, T
 
 def calc_Cv(mbar, Etot, T):
     
@@ -130,9 +132,67 @@ def calc_Cv(mbar, Etot, T):
 
     return Cv
 
-#def make_umbrella_u_kn():
+def make_umbrella_u_kn(r0, path, step_size, energies, Etot, atom_pair): 
+   
+    # I'm not sure if we can actually interpolate points this way or not 
+    r0_interped = np.arange(float(r0[0]), float(r0[-1]) + step_size, step_size)
+ 
+    # Construct N_k
+    N_k = np.zeros(len(r0))
+    count = 0
+    for i in range(len(r0)):
+        if np.isclose(r0_interped[i], np.array(r0, float)).any():
+            N_k[i] = len(r0[count])
+            count += 1
+        else:
+            None #since N_k is initialzed to 0
+    
+    r0 = read_filenames(r0, path)
 
-#### NO FUCKIN WAY THIS BAD BOY WORKS ####
+    # This is specific to SH3 - 1st bead index is 0, last bead index is 464
+    # atom_pair = np.array([[0, 464]])
+
+    energies, Etot = read_data(centers, '~~~~PATH~~~~')
+
+    os.chdir('~~~~Path to directory to contiain r1N')
+
+    # Initialize array for u_kn and counter
+    u_kn = np.zeros((len(r0_interped),len(Etot)), float)
+    count = 0
+
+    for k in r0:
+
+        os.chdir(k)
+
+        # Read end-end distances from file, if file doesn't exist, make one
+
+        if not os.path.exists('r1N.npy'):
+
+            traj = md.load('traj.xtc', top='conf.gro')
+            r1N = md.compute_distances(traj, np.array)
+            np.save('r1N.npy', r1N)
+
+        else:
+            r1N = np.load('r1N.npy')
+        
+        # Calculate the potential bias from umbrella and remove it
+        u_bias = .5*kb_KJ_mol*(r1N - k)**2
+
+        energy_unbias = energies - u_bias
+
+        Etot_unbias = np.concatenate(energy_unbias)
+
+        u_kn[count] = Etot_unbias_temp
+
+        count += 1
+
+        # Hop back out to parent directory so we can do it again
+        os.chdir('..')
+ 
+    return N_k, u_kn, r0_interped
+    
+  
+### NO WAY THIS WORKS ###    
 
 def make_me_some_spaghetti(protein_name, path_to_contacts, Q_long, numbins, thermo_states,  mbar ):
     
@@ -174,7 +234,7 @@ if __name__ == "__main__":
 
     """
 
-    centers = read_filenames(umbrella_last, '~/scratch/SH3.constant.temp/test_melt/6-1temp_series_u_kn_N_k(temps, energies, Etot, step_size):temp_series_u_kn_N_k(temps, energies, Etot, step_size):2-15_umbrella/kumb_0.05/')
+    centers = read_filenames(umbrella_last, '~/scratch/SH3.constant.temp/test_melt/6-12-15_umbrella/kumb_0.05/')
 
     Q, Q_long = read_data(centers,  '~/scratch/SH3.constant.temp/test_melt/6-12-15_umbrella/kumb_0.05/Q.dat'
     
@@ -184,7 +244,7 @@ if __name__ == "__main__":
 
     energies, Etot = read_data(temps, '/home/gsc4/scratch/SH3.constant.temp/test_melt/')
 
-    N_k, u_kn, T = temp_series_u_kn_N_k(temps, energies, Etot, 1)   
+    u_kn, N_k, T = temp_series_u_kn_N_k(temps, energies, Etot, 1)   
 
     mbar = pymbar.MBAR(u_kn, N_k)
 
