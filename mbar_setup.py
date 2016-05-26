@@ -156,38 +156,48 @@ def make_umbrella_u_kn(r0, path, step_size, energies, Etot, atom_pair):
 
     os.chdir('~~~~Path to directory to contiain r1N')
 
-    # Initialize array for u_kn and counter
+    # Initialize array for u_kn and value for indexing
     u_kn = np.zeros((len(r0_interped),len(Etot)), float)
-    count = 0
+    start_here = 0
 
-    for k in r0:
-
-        os.chdir(k)
+    for i in r0:
+        
+        # Hop into directory w/ data    
+        os.chdir(i)
 
         # Read end-end distances from file, if file doesn't exist, make one
-
         if not os.path.exists('r1N.npy'):
 
             traj = md.load('traj.xtc', top='conf.gro')
             r1N = md.compute_distances(traj, np.array)
             np.save('r1N.npy', r1N)
-
         else:
-            r1N = np.load('r1N.npy')
+            r1N = np.load('r1N.npy')        
+
+        # Need this for indexing
+        num_frames = len(r1N)
+
+        count = 0
+
+        for k in r0:
+       
+            # Calculate bias from umbrella potential and remove it
+            u_bias = .5*kb_KJ_mol*(r1N - k)**2
+            energy_unbias = energies - u_bias
+            Etot_unbias = np.concatenate(energy_unbias)
+
+            # Indexing is complicated in case a different number of trials
+            # were performed at each umbrella center value
+            u_kn[count][start_here:(start_here+num_frames)] = Etot_unbias_temp
+
+            count += 1
         
-        # Calculate the potential bias from umbrella and remove it
-        u_bias = .5*kb_KJ_mol*(r1N - k)**2
-
-        energy_unbias = energies - u_bias
-
-        Etot_unbias = np.concatenate(energy_unbias)
-
-        u_kn[count] = Etot_unbias_temp
-
-        count += 1
-
+        # Index to start at for the next run through
+        start_here += num_frames        
+    
         # Hop back out to parent directory so we can do it again
         os.chdir('..')
+        
  
     return N_k, u_kn, r0_interped
     
