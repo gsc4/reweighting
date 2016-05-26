@@ -12,19 +12,15 @@ import matplotlib.pyplot as plt
 global kb_kJ_mol
 kb_KJ_mol = .0083145
 
-def read_filenames(names_file, path):
-    
+def read_filenames(names_file, path): 
     """ 
-    Reads the data found in names_file to get the names we'll need later to read in desired data
+    Reads names_file to make a list of names
 
-    Inputs:          
+    Keyword arguments:
+    names_file -- (string) name of file containing beginnings of other filenames
 
-        names_file - (string) name of file storing the beginning of the names for all the files from which data is to be read
-
-    Outputs:
-    
-        names - (list) contains the filename beginnings for the data to be read in later
-
+    Returns:
+    names -- (list) contains the filename beginnings for the data to be read in later
     """
 
     # Get to the right place
@@ -40,25 +36,17 @@ def read_filenames(names_file, path):
     return names
 
 def read_data(names, path, stride=1):
-
     """
-    Reads the data found in the files defined in <names-path>
+    Reads the data found in the named files on the given path
 
-    Inputs:
+    Keyword arguments:
+    names -- (list) names of files to read
+    path -- (string) path to files to be read
+    stride (optional) -- (int) only take  data every stride distance
 
-        names - (list) contains the filename beginnings for data files to be read in
-
-        path - (string) contains the filename end and path for the data files to be read in
-
-        stride (optional) - (int) considers only the data every stride distance
-
-    Outputs:
-
-        data - (numpy.ndarray) - matrix with all the data not yet put into a single vector
-
-        data_long - (numpy.ndarray) - a 1xn (n is number of datapoints read in)  array of all the data read in 
-
-
+    Returnss:
+    data -- (numpy.ndarray) array of read in data
+    data_long -- (numpy.ndarray) 1xn array of all the data read in (a vector)
     """ 
 
     names_strided = names[::stride]
@@ -70,15 +58,19 @@ def read_data(names, path, stride=1):
     return (data, data_long)
 
 def temp_series_u_kn_N_k(temps, energies, Etot, step_size):
-
     """
-    Creates u_kn for data taken at a range of different temperatures        
+    Creates u_kn and N_k for data at different temperatures        
 
-    Inputs:
-        
-        temps - (list of strings) holds all the temps data was taken from
+    Keyword arguments:
+    temps -- (list of strings) temperatures at which data was taken
+    energies -- (numpy.ndarray)  kxn array of energy data
+    Etot -- (numpy.ndarray) 1x(k*n) array of energy data (vector)
+    step_size -- (float) interpolating step size
 
-        energies - (numpy.ndarray) - holds 
+    Returns:
+    u_kn -- (numpy.ndarray) every frame evaluated at every thermodynamic state
+    N_k -- (numpy.ndarray) number of actual data frames for corresponding T
+    T -- (numpy.ndarray) all temperatures (including interpolated ones)
 
     """
     
