@@ -152,9 +152,9 @@ def make_umbrella_u_kn(r0, path, step_size, energies, Etot, atom_pair):
     # This is specific to SH3 - 1st bead index is 0, last bead index is 464
     # atom_pair = np.array([[0, 464]])
 
-    energies, Etot = read_data(centers, '~~~~PATH~~~~')
+    energies, Etot = read_data(centers, path)
 
-    os.chdir('~~~~Path to directory to contiain r1N')
+    os.chdir(path)
 
     # Initialize array for u_kn and value for indexing
     u_kn = np.zeros((len(r0_interped),len(Etot)), float)
