@@ -124,7 +124,7 @@ def calc_Cv(mbar, Etot, T):
 
     return Cv
 
-def make_umbrella_u_kn(r0, path, step_size, energies, Etot, atom_pair): 
+def make_umbrella_u_kn_N_k(r0, path, step_size, energies, Etot, atom_pair):
    
     # I'm not sure if we can actually interpolate points this way or not 
     r0_interped = np.arange(float(r0[0]), float(r0[-1]) + step_size, step_size)
@@ -161,7 +161,7 @@ def make_umbrella_u_kn(r0, path, step_size, energies, Etot, atom_pair):
         if not os.path.exists('r1N.npy'):
 
             traj = md.load('traj.xtc', top='conf.gro')
-            r1N = md.compute_distances(traj, np.array)
+            r1N = md.compute_distances(traj, atom_pair)
             np.save('r1N.npy', r1N)
         else:
             r1N = np.load('r1N.npy')        
