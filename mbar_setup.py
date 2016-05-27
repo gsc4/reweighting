@@ -57,15 +57,15 @@ def read_data(names, path, stride=1):
 
     return (data, data_long)
 
-def temp_series_u_kn_N_k(temps, energies, Etot, step_size):
+def temp_series_u_kn_N_k(temps, energies, Etot, num_interp = 2):
     """
-    Creates u_kn and N_k for data at different temperatures        
+    Creates u_kn and N_k, interpolates 2 points by default        
 
     Keyword arguments:
     temps -- (list of strings) temperatures at which data was taken
     energies -- (numpy.ndarray)  kxn array of energy data
     Etot -- (numpy.ndarray) 1x(k*n) array of energy data (vector)
-    step_size -- (float) interpolating step size
+    num_interp (optional) -- (int) number interpolating points
 
     Returns:
     u_kn -- (numpy.ndarray) every frame evaluated at every thermodynamic state
@@ -74,18 +74,20 @@ def temp_series_u_kn_N_k(temps, energies, Etot, step_size):
 
     """
     
-    T = np.arange(int(temps[0]), int(temps[-1]) + step_size, step_size)
-    
+    flt_temps = [ float(x) for x in temps ]
+ 
+    for i in range(len(flt_temps) - 1):
+        temp_diff = flt_temps[i+1] - flt_temps[i]
+        for j in range(num_interp): 
+            flt_temps.append(flt_temps[i] + (j+1)*temp_diff/(num_interp + 1))
+
+    T = np.array(flt_temps)
+
     # Construct N_k
     N_k = np.zeros(len(T))
-    count = 0
-    for i in range(len(T)):
-        if np.isclose(T[i], np.array(temps, float)).any():
-            N_k[i] = len(energies[count])
-            count += 1
-        else:
-            None #since N_k is initialzed to 0
-    
+    for i in range(len(temps)):
+            N_k[i] = len(energies[i])
+
     # Construct u_kn
     u_kn = np.zeros((len(T), len(Etot)), float)
     for i in range(len(T)):
@@ -124,26 +126,22 @@ def calc_Cv(mbar, Etot, T):
 
     return Cv
 
-def make_umbrella_u_kn_N_k(r0, path, step_size, energies, Etot, atom_pair):
-   
-    # I'm not sure if we can actually interpolate points this way or not 
-    r0_interped = np.arange(float(r0[0]), float(r0[-1]) + step_size, step_size)
+def make_umbrella_u_kn_N_k(r0, path, energies, Etot, atom_pair, num_interp=2):
+    
+    flt_r0 = [ float(x) for x in r0 ]
+ 
+    for i in range(len(r0) - 1):
+        r0_diff = flt_r0[i+1] - flt_r0[i]
+        for j in range(num_interp): 
+            flt_r0.append(flt_r0[i] + (j+1)*r0_diff/(num_interp + 1))
+
+    r0_interp = np.arange(flt_r0)
  
     # Construct N_k
-    N_k = np.zeros(len(r0))
-    count = 0
-    for i in range(len(r0)):
-        if np.isclose(r0_interped[i], np.array(r0, float)).any():
-            N_k[i] = len(r0[count])
-            count += 1
-        else:
-            None #since N_k is initialzed to 0
-    
-    r0 = read_filenames(r0, path)
-
-    # This is specific to SH3 - 1st bead index is 0, last bead index is 464
-    # atom_pair = np.array([[0, 464]])
-
+    N_k = np.zeros(len(r0_interp))
+    for i in range(len(r0_interp)):
+        N_k[i] = len(r0[i])
+     
     energies, Etot = read_data(centers, path)
 
     os.chdir(path)
@@ -174,6 +172,7 @@ def make_umbrella_u_kn_N_k(r0, path, step_size, energies, Etot, atom_pair):
         for k in r0:
        
             # Calculate bias from umbrella potential and remove it
+            #### k_umb != kb ####
             u_bias = .5*kb_KJ_mol*(r1N - k)**2
             energy_unbias = energies - u_bias
             Etot_unbias = np.concatenate(energy_unbias)
@@ -253,6 +252,14 @@ if __name__ == "__main__":
     Cv = calc_Cv(mbar, Etot, T)    
 
     # Generate plot of Cv vs T
+
+######## This seems like a super circuitious route to do this... ####
+    T_Cv_zip = zip(T,Cv)
+    T_Cv_sort = sorted(T_Cv_zip, key=lambda x:x[0])
+    T = [ x[0] for x in T_Cv_sort ] 
+    Cv = [ x[1] for x in T_Cv_sort ]
+#####################################################################
+ 
     plt.figure()
     plt.plot(T,Cv)
     plt.title('Cv vs T')
