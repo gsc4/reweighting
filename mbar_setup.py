@@ -304,46 +304,62 @@ def free_eng_profile(mbar, rxn_coord, numbins=100):
     return A_over_RT, A_over_RT_min_0, bin_mid
 
 ### NO WAY THIS WORKS ###     
-def make_me_some_spaghetti(protein_name, path_to_contacts, Q_long, numbins, thermo_states,  mbar ):
+def spaghetti_prep(p_name, states, states_interp, numtrials, mbar, path, numbins=100):
     """    
 
     HOT GARBAGE
     
     """
 
+    trial_indices = range(numtrials)
+
     cwd = os.getcwd
 
     # Take me to the contacts file, my body is ready
-    os.chdir(path_to_contacts)
+    os.chdir(path)
 
-    contacts = np.loadtxt(protein_name + ".contacts")
+    pairs = np.loadtxt(p_name + '.contacts', dtype=int) - 1
 
-    model, fitopts = mdb.inputs.load_model(protein_name)
+    trajfiles = [ "T_{}_{}/traj.xtc".format(x, y) for x in states for y in trial_indices] 
 
-    ri_0 = model.pairwise_distances
+    # Calculate pairwise distances
+    top = 'T_{}_{}'.format(states[0], trial_indices[0])
+    ref = md.load(top + '/ref.pdb')
+    r0 = md.compute_distances(ref, pairs)[0]    
+    
+    # DO I USE THIS OR DO I JUST USE r0
+    r0_cont = 1.2*r0
     
     # Make histogram    
-    (bin_n, bin_edges) = np.histogram(Q , bins = numbins)
+    (bin_n, bin_edges) = np.histogram(Q_long , bins = numbins)
     bin_p = bin_n/len(Q_long)
-    min_mid = .5*(bin_edges[1:] + bin_edges[:-1])
+    bin_mid = .5*(bin_edges[1:] + bin_edges[:-1])
 
-    # Get expectation of h function
-    h_expectations = np.zeros((len(thermo_states), numbins), float) 
-    for i in range(numbins):
-        h = (Q_long > bin_edges[i]) & (Q_long < bin_edges[i+1])
-        h_expectation[:,i] = np.sum(h)*1./len(h)
-    
+    # HAVE TO READ THIS FROM SOMEWHERE
     gamma = 5
-    width = 2./gamma
+    width = 2./gamma 
 
-    for i in range(len(contacts)):
-        qi = observables.TanhContacts(top, contacts[i], ri_0[i], width)
-        qtanh = observables.calculate_observable(trajfiles, qtanhsum_obs)
+    Q = np.zeros((len(pairs), numbins), float)
+    
+    # Since mbar takes a while I'll just try to do it empirically at first
+    #for i in range(len(pairs)):
+    for i in range(5):
+        qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
+        Q_long = observables.calculate_observable(trajfiles, qi)
         for j in range(numbins):
-            h = 'which frames are in bin j' 'can move above loop 246 to here'
-            Qij, dQij = mbar.computeExpectations(qi*h_expectation[j])/h_expectation[j]
+            h = (Q_long > bin_edges[j]) & (Q_long < bin_edges[j+1])
+            h_expectation = np.sum(h)*1./len(h)
+            numerator_expectation = np.sum(Q_long*h)/len(h)   
+    
+            Q[i, j] = numerator_expectation/h_expectation
+
+            #Qij, dQij = mbar.computeExpectations(qi*h_expectation[j])/h_expectation[j]
             # Save Qij for all thermo states somehow, need to ask klubes about all of this first
    
+
+
+
+
 ###############################################################################
 #                                    TEST                                     #
 ###############################################################################
@@ -351,9 +367,23 @@ def make_me_some_spaghetti(protein_name, path_to_contacts, Q_long, numbins, ther
 # Test functions by playing in the sandbox
 
 if __name__ == "__main__":
+    
+    ##### Test spaghetti stuff #####
+     
+    path = '/home/gsc4/scratch/SH3.constant.temp/test_melt/umbrella_sampling/5-27-2016_sh3_ca_sbm/')  
+
+    p_name = 'SH3'
+    states = ['128.5', '129.0', '129.5']
+    states_interp = states
+    numtrials = 3
+    
+    mbar = 'ooo'
+
+        
+
 
     ##### Test umbrella stuff #####
-
+    """
     path = '/home/gsc4/scratch/SH3.constant.temp/test_melt/umbrella_sampling/4-7-2016_end_end_umb/'
 
     T_umb = 129.0
@@ -365,7 +395,7 @@ if __name__ == "__main__":
     energies, poop = read_data(r0, '/Etot.dat', path)
     
     u_kn, N_k, r0_interp, r1N_all = umbrella_u_kn_N_k(r0, energies, T_umb, atom_pair, path, num_interp=0)
-    """ 
+     
     mbar = pymbar.MBAR(u_kn, N_k)
     
     # Turns out I don't need this at all...  
@@ -373,7 +403,7 @@ if __name__ == "__main__":
 
     A_over_RT, A_over_RT_min_0, bin_mid = free_eng_profile(mbar, r1N_all)
 
-    ##### Plot stuff #####
+    ##### Plot umbrella stuff #####
     
     plt.figure()
     for i in range(len(r0_interp) + 1):
@@ -406,10 +436,9 @@ if __name__ == "__main__":
     mbar = pymbar.MBAR(u_kn, N_k)
 
     Cv = calc_Cv(mbar, Etot, T)    
-    """
+    
+    ##### Plot temperature stuff #####
 
-    ##### Plot stuff #####
-    """
 ######## This seems like a super circuitious route to do this... ####
     T_Cv_zip = zip(T,Cv)
     T_Cv_sort = sorted(T_Cv_zip, key=lambda x:x[0])
