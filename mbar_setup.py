@@ -38,7 +38,7 @@ def read_filenames(names_file, path):
 
     return names
 
-def read_data(name_start, name_end, path, stride=1):
+def read_data(name_start, name_end, path, stride=1, n_trials=1, combine_like_trials=True):
     """
     Reads the data found in the named files on the given path
 
@@ -52,6 +52,11 @@ def read_data(name_start, name_end, path, stride=1):
         Path to file location
     stride : int, optional
         Only consider data every stride distance
+    n_trials : int, optional
+        Number of trials conducted at same temperature
+    combine_like_trials : string, optional
+        Combines data read from different trials at same thermodynamic state    
+
 
     Returns
     -------
@@ -61,20 +66,27 @@ def read_data(name_start, name_end, path, stride=1):
         1xn array of all the read-in data (a vector)
     """ 
 
+    trial_indices = range(n_trials)
+    
     names_strided = name_start[::stride]
     
-    if name_end == '/Q.dat':
-        data = np.array([np.loadtxt( str(path) + ("{}{}").format(x, name_end))\
-             for x in names_strided ])
+    if name_end == '/Q.dat' or name_end == '/qtanh.dat':
+        data = np.array([np.loadtxt( str(path) + ("{}_{}{}").format(x, t, name_end))\
+             for x in names_strided for t in trial_indices ])
     else:
-        data = np.array([np.loadtxt( str(path) + ("{}{}").format(x, name_end),
-             usecols=[1]) for x in names_strided ] )
+        data = np.array([np.loadtxt( str(path) + ("{}_{}{}").format(x, t, name_end),
+             usecols=[1]) for x in names_strided for t in trial_indices] )
     
+    if combine_like_trials & (not n_trials == 1):
+        data = data.reshape(data.shape[0]/n_trials, data.shape[1]*n_trials)
+    else:
+        None
+
     data_long = np.concatenate(data)
 
     return (data, data_long)
 
-def temp_series_u_kn_N_k(temps, energies, Etot, num_interp = 2):
+def temp_series_u_kn_N_k(temps, energies, Etot, num_interp = 2 ):
     """
     Creates inputs for mbar on constant temperature simulations
 
@@ -102,8 +114,10 @@ def temp_series_u_kn_N_k(temps, energies, Etot, num_interp = 2):
         All temperatures (including interpolated ones)
     """
     
+     
     flt_temps = [ float(x) for x in temps ]
  
+    # Interpolating is now tricky becaus we can have multiple trials at the same temp...
     for i in range(len(flt_temps) - 1):
         temp_diff = flt_temps[i+1] - flt_temps[i]
         for j in range(num_interp): 
@@ -114,7 +128,7 @@ def temp_series_u_kn_N_k(temps, energies, Etot, num_interp = 2):
     # Construct N_k
     N_k = np.zeros(len(T))
     for i in range(len(temps)):
-            N_k[i] = len(energies[i])
+        N_k[i] = len(energies[i])
 
     # Construct u_kn
     u_kn = np.zeros((len(T), len(Etot)), float)
@@ -227,7 +241,14 @@ def umbrella_u_kn_N_k(r0, energies, T, atom_pair, path, num_interp=2):
         os.chdir(r0[i])
         
         ###### NEED TO READ THIS VALUE FROM SOMEWHERE ######
-        k_umb = 2   
+        with open('run.mdp','r') as fin:
+            # This assumes there will always be an empty line afterwards
+            k_umb_line = list(fin)[-2]
+            for word in k_umb_lin.split():
+                try:
+                    k_umb = float(word)
+                except ValueError:
+                    None 
         
         # Read end-end distances from file, if file doesn't exist, make one
         if not os.path.exists('r1N.npy'):
@@ -293,8 +314,10 @@ def free_eng_profile(mbar, rxn_coord, numbins=100):
 
     for i in range(numbins):
         h = (rxn_coord > bin_edges[i]) & (rxn_coord < bin_edges[i+1])
-        p_of_rxn_coord[:,i], dp_of_rxn_coord[:,i] = mbar.computeExpectations(h.astype(int))
-        p_of_rxn_coord_min_0[:,i] = p_of_rxn_coord[:,i] - min(p_of_rxn_coord[:,i])
+        p_of_rxn_coord[:,i], dp_of_rxn_coord[:,i] \
+            = mbar.computeExpectations(h.astype(int))
+        p_of_rxn_coord_min_0[:,i] = p_of_rxn_coord[:,i] \
+            - min(p_of_rxn_coord[:,i])
 
     A_over_RT = -np.log(p_of_rxn_coord)
     A_over_RT_min_0 = np.zeros(A_over_RT.shape)
@@ -303,36 +326,31 @@ def free_eng_profile(mbar, rxn_coord, numbins=100):
 
     return A_over_RT, A_over_RT_min_0, bin_mid
 
-### NO WAY THIS WORKS ###     
-def spaghetti_prep(p_name, states, states_interp, numtrials, mbar, path, numbins=100):
+def spaghetti_prep(p_name, states, states_interp, numtrials, Q_p, mbar, path,
+     numbins=100, smooth='yes'):
     """    
 
     HOT GARBAGE
     
     """
 
+    cwd = os.getcwd()
+    os.chdir(path)
+    
     trial_indices = range(numtrials)
 
-    cwd = os.getcwd
-
-    # Take me to the contacts file, my body is ready
-    os.chdir(path)
-
     pairs = np.loadtxt(p_name + '.contacts', dtype=int) - 1
-
-    trajfiles = [ "T_{}_{}/traj.xtc".format(x, y) for x in states for y in trial_indices] 
+    trajfiles = [ "T_{}_{}/traj.xtc".format(x, y) for x in states \
+        for y in trial_indices] 
 
     # Calculate pairwise distances
     top = 'T_{}_{}'.format(states[0], trial_indices[0])
     ref = md.load(top + '/ref.pdb')
     r0 = md.compute_distances(ref, pairs)[0]    
-    
-    # DO I USE THIS OR DO I JUST USE r0
     r0_cont = 1.2*r0
     
-    # Make histogram    
-    (bin_n, bin_edges) = np.histogram(Q_long , bins = numbins)
-    bin_p = bin_n/len(Q_long)
+    # Make histogram with appropriate bins   
+    bin_n, bin_edges = np.histogram(np.array(Q_p), bins = numbins)
     bin_mid = .5*(bin_edges[1:] + bin_edges[:-1])
 
     # HAVE TO READ THIS FROM SOMEWHERE
@@ -341,24 +359,36 @@ def spaghetti_prep(p_name, states, states_interp, numtrials, mbar, path, numbins
 
     Q = np.zeros((len(pairs), numbins), float)
     
-    # Since mbar takes a while I'll just try to do it empirically at first
-    #for i in range(len(pairs)):
-    for i in range(5):
-        qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
-        Q_long = observables.calculate_observable(trajfiles, qi)
-        for j in range(numbins):
-            h = (Q_long > bin_edges[j]) & (Q_long < bin_edges[j+1])
-            h_expectation = np.sum(h)*1./len(h)
-            numerator_expectation = np.sum(Q_long*h)/len(h)   
-    
-            Q[i, j] = numerator_expectation/h_expectation
+    # EMPIRICALLY 
+    if smooth == 'no':
+        for i in range(len(pairs)):    
+            qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i],
+                 width)
+            Q_long = np.concatenate(observables.calculate_observable(trajfiles, qi))
+            for j in range(numbins):
+                h = (Q_p > bin_edges[j]) & (Q_p <= bin_edges[j+1])
+                if np.any(h):
+                    Q[i, j] = np.mean(Q_long[h])
+    # MBAR
+    else:
+        #for i in range(len(pairs)):
+        for i in [0]:
+            qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i],
+                 width)
+            Q_long = np.concatenate(observables.calculate_observable(trajfiles, qi))
+        
+            for j in range(numbins): 
+                h = ((Q_p > bin_edges[j]) & (Q_p <= bin_edges[j+1])).astype(int)
+                h_avg, dh_avg = mbar.computeExpectations(h)
+                numerator_avg, dnumerator_avg = mbar.computeExpectations((Q_long.transpose())[0]*h)
+                
+                print numerator_avg/h_avg
 
-            #Qij, dQij = mbar.computeExpectations(qi*h_expectation[j])/h_expectation[j]
-            # Save Qij for all thermo states somehow, need to ask klubes about all of this first
-   
+                #Q[i,j] = numerator_avg/h_avg
 
+    os.chdir(cwd)
 
-
+    return Q, bin_mid
 
 ###############################################################################
 #                                    TEST                                     #
@@ -370,17 +400,46 @@ if __name__ == "__main__":
     
     ##### Test spaghetti stuff #####
      
-    path = '/home/gsc4/scratch/SH3.constant.temp/test_melt/umbrella_sampling/5-27-2016_sh3_ca_sbm/')  
+    path = '/home/gsc4/scratch/SH3.constant.temp/test_melt/umbrella_sampling/5-27-2016_sh3_ca_sbm/' 
 
     p_name = 'SH3'
+
     states = ['128.5', '129.0', '129.5']
-    states_interp = states
-    numtrials = 3
     
-    mbar = 'ooo'
+    states_interp = states
+    
+    numtrials = 3
 
-        
+    name_start = ['{}{}'.format(a,b) for a, b in zip(['T_']*3, states) ]
 
+    energies, Etot = read_data(name_start, '/Etot.xvg', path, n_trials=3)
+
+    #energies = np.array([np.loadtxt( str(path) + ("T_{}_{}{}").format(x,y,'/Etot.xvg' ),
+    #    usecols=[1]) for x in states for y in range(numtrials)] )
+    
+    u_kn, N_k, T = temp_series_u_kn_N_k(states, energies, Etot, num_interp = 0)
+    
+    # Read in Q data for the protein as a whole
+    Q_p = np.concatenate([np.loadtxt( str(path) + ("T_{}_{}{}").format(x,y,'/qtanh.dat'))
+         for x in states for y in range(numtrials)] )
+
+    Q_p, Q_p_long = read_data(name_start, '/qtanh.dat', path, n_trials=3)
+
+    u_kn, N_k, T =  temp_series_u_kn_N_k(states, energies, Etot, num_interp=0)
+   
+    mbar = pymbar.MBAR(u_kn, N_k)
+ 
+    Q, bin_mid = spaghetti_prep(p_name, states, states_interp, numtrials, Q_p_long, mbar, path, numbins=10)
+
+    plt.figure()
+    for i in range(len(Q)):
+        plt.plot(bin_mid, Q[i,:])
+
+    plt.xlabel('Q')
+    plt.ylabel('Percent formation of Contact')
+    plt.title('SH3 Spaghetti Plot')
+
+    plt.savefig('spaghetti_plot.pdf')
 
     ##### Test umbrella stuff #####
     """
@@ -431,7 +490,7 @@ if __name__ == "__main__":
 
     energies, Etot = read_data(temps, '_0/Etot.xvg', '/home/gsc4/scratch/SH3.constant.temp/test_melt/')
 
-    u_kn, N_k, T = temp_series_u_kn_N_k(temps, energies, Etot, 1)   
+    u_kn, N_k, T = temp_series_u_kn_N_k(temps,  energies, Etot, num_interp=1)   
 
     mbar = pymbar.MBAR(u_kn, N_k)
 
