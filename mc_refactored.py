@@ -5,7 +5,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 # I'm a badass and I don't follow the rules
-from  mbar_setup import *
+from mbar_setup import *
 
 if __name__ == "__main__":
 
