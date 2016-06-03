@@ -1,8 +1,12 @@
 import os
+import matplotlib.cm as cm
+import time
 
 from refactored_setup import *
 
 if __name__ == '__main__':
+
+    t1 = time.time()
 
     path = '/home/gsc4/scratch/SH3.constant.temp/test_melt/umbrella_sampling/5-27-2016_sh3_ca_sbm/'
 
@@ -14,42 +18,84 @@ if __name__ == '__main__':
 
     name_format = 'T_{}_{}/{}'
     name_data = [[128.5, 129.0, 129.5], [0,1,2],['Etot.xvg']]
+    E_concat, n_frames = read_data_const_temp(name_format, name_data, n_trials=3)
 
-    #E_concat, n_frames = read_data_const_temp(name_format, name_data, n_trials=3)
-
-    name_data = [[129.0], [0,1,2],['qtanh.dat']]
-
+    name_data = [[128.5,129.0,129.5], [0,1,2],['qtanh.dat']] 
+    name_format = 'T_{}_{}/{}'
     Q_concat, dumbo = read_data_const_temp(name_format, name_data, n_trials=3)
 
     temps = [128.5, 129.0, 129.5]
-
-    #mbar, T_interp = create_mbar_const_temp(temps, E_concat, n_frames)
-
+    mbar, T_interp = create_mbar_const_temp(temps, E_concat, n_frames, n_interp=0)
     #Cv = calc_Cv(mbar, E_concat, T_interp)
 
-    dir_name_format = 'T_{}_{}'
-    dir_name_data = [[129.0], [0,1,2]]
-
-    empirical_spaghetti(dir_name_format, dir_name_data, 'SH3', Q_concat, 3)
-
-    os.chdir(cwd)
+    #dir_name_format = 'T_{}_{}'
+    #dir_name_data = [[129.0], [0,1,2]]
+    #qivsQ, bin_mid, loops = empirical_spaghetti(dir_name_format, dir_name_data, 'SH3', Q_concat)
     
-    ##### Plot temperature stuff #####
+    
+    print time.time() - t1 
+    
+    dir_name_format = 'T_{}_{}'
+    dir_name_data = [temps, range(3)]
+    mbar_qivsQ, bin_mid, loops = mbar_spaghetti(dir_name_format, dir_name_data, 'SH3', Q_concat, len(T_interp), mbar, numbins = 50) 
 
-######## This seems like a super circuitious route to do this... ####
-    T_Cv_zip = zip(T_interp,Cv)
-    T_Cv_sort = sorted(T_Cv_zip, key=lambda x:x[0])
-    T = [ x[0] for x in T_Cv_sort ]
-    Cv = [ x[1] for x in T_Cv_sort ]
-#####################################################################
+    if not os.path.exists('mbar_QivsQ'):
+        os.mkdir('mbar_QivsQ')
+    os.chdir('mbar_QivsQ')
+    for i in range(len(T_interp)):
+        np.save('mbar_QivsQ_' + str(T_interp[i]) + '.npy', mbar_qivsQ[i,:,:])
+        
+    np.savetxt('temps', T_interp)
+
+#### EMPIRICAL SPAGHETTI    
+    """
+    max_loop = np.max(loops)
+    
+    for i in range(len(qivsQ)):
+        plt.plot(bin_mid, qivsQ[i,:], c=cm.jet(loops[i]/max_loop)) 
+ 
+    plt.title('qi vs Qtot')
+    plt.xlabel('Qtot')
+    plt.ylabel('Percent formation of contact')
+    
+    plt.savefig('qivsQ.pdf')
+    """
+
+#### MBAR SPAGHETTI
+
+    max_loop = np.max(loops)    
+
+    for i in range(len(T_interp)):
+        
+        plt.figure()
+        
+        for j in range(len(mbar_qivsQ)):
+            plt.plot(bin_mid, mbar_qivsQ[i,j,:], c=cm.jet(loops[i]/max_loop))
+        
+        plt.title('qi vs Qtot')
+        plt.xlabel('Qtot')
+        plt.ylabel('Percent formation of contact')
+        plt.savefig('QivsQ_' + str(T_interp[i]))
+        plt.close()       
+     
+    t2 = time.time()
+
+    t_total = t2-t1
+
+    print t_total
+
+    """
+    ##### Plot temperature stuff #####
+    
+    ### argsort to reorder
+    order = np.argsort(T_interp)
 
     plt.figure()
-    plt.plot(T,Cv)
+    plt.plot(T_interp[order],Cv[order])
     plt.title('Cv vs T')
     plt.xlabel('T (K)')
     plt.ylabel('Cv')
 
     plt.savefig("Cv_vs_T.pdf")
 
-
-
+    """
