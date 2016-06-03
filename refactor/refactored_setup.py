@@ -269,7 +269,7 @@ def calc_Cv(mbar, E_concat, T_interp):
 
     return Cv
 
-def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, Qtot_concat, n_thermo_states, numbins=100 ):
+def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, Qtot_concat, numbins=100 ):
 
     """
 
@@ -298,7 +298,7 @@ def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, Qtot_concat, 
     gamma = 5
     width = 2./gamma
 
-    qivsQ = np.zeros((n_thermo_states,len(pairs), numbins), float) 
+    qivsQ = np.zeros((len(pairs), numbins), float) 
 
     for i in range(len(pairs)):
         qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
@@ -306,8 +306,44 @@ def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, Qtot_concat, 
         for j in range(numbins):
             h = (Qtot_concat > bin_edges[j]) & (Qtot_concat <= bin_edges[j+1])
             if np.any(h):
-                qivsQ[:,i,j] = np.mean(qi_tanh[h])
+                qivsQ[i,j] = np.mean(qi_tanh[h])
         
     return qivsQ, bin_mid
 
-#def mbar_spaghetti(
+def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, Qtot_concat, n_thermo_states, mbar, numbins=100):
+    
+    name_data_comb = [ i for i in itertools.product(*dir_name_data) ]
+    dirnames = [ dir_name_format.format(*i) for i in name_data_comb ] 
+    
+    pairs = np.loadtxt(prot_name + '.contacts', dtype=int) - 1
+ 
+    trajfiles = []
+    for i in dirnames:
+        trajfiles.append(i + '/traj.xtc')  
+
+    # Calculate pairwise distances
+    top = dirnames[0] + '/ref.pdb'
+    ref = md.load(top)
+    r0 = md.compute_distances(ref, pairs)[0]
+    r0_cont = 1.2*r0
+
+    bin_n, bin_edges = np.histogram(Qtot_concat, bins=numbins)
+    bin_mid = .5*(bin_edges[1:] + bin_edges[:-1])
+
+    gamma = 5
+    width = 2./gamma
+
+    qivsQ = np.zeros((n_thermo_states, len(pairs), numbins), float) 
+        
+    for i in range(len(pairs)):
+        qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
+        qi_tanh = np.concatenate(observables.calculate_observable(trajfiles, qi))
+        
+        for j in range(numbins):       
+            h = (Qtot_concat > bin_edges[j]) & (Qtot_concat <= bin_edges[j+1])
+            h_avg, dh_avg = mbar.computeExpectations(h)
+            numerator_avg, dnumerator_avg = mbar.computeExpectations((qi_tanh.transpose())[0]*h)
+            
+            qivsQ[:,i,j] = numerator_avg/h_avg
+
+    return qivsQ, bin_mid
