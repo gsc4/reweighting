@@ -5,6 +5,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pymbar
 import itertools
+import time
 
 import mdtraj as md
 
@@ -299,16 +300,18 @@ def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, Qtot_concat, 
     width = 2./gamma
 
     qivsQ = np.zeros((len(pairs), numbins), float) 
+    loops = np.zeros(len(pairs), float)
 
     for i in range(len(pairs)):
         qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
         qi_tanh = np.concatenate(observables.calculate_observable(trajfiles, qi))
+        loops[i] = pairs[i][1] - pairs[i][0]
         for j in range(numbins):
             h = (Qtot_concat > bin_edges[j]) & (Qtot_concat <= bin_edges[j+1])
             if np.any(h):
                 qivsQ[i,j] = np.mean(qi_tanh[h])
         
-    return qivsQ, bin_mid
+    return qivsQ, bin_mid, loops
 
 def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, Qtot_concat, n_thermo_states, mbar, numbins=100):
     
@@ -333,17 +336,26 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, Qtot_concat, n_the
     gamma = 5
     width = 2./gamma
 
-    qivsQ = np.zeros((n_thermo_states, len(pairs), numbins), float) 
+    qivsQ = np.zeros((n_thermo_states, len(pairs), numbins), float)     
+    loops = np.zeros(len(pairs), float)
         
     for i in range(len(pairs)):
+    #for i in [0]:
         qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
         qi_tanh = np.concatenate(observables.calculate_observable(trajfiles, qi))
-        
+        loops[i] = pairs[i][1] - pairs[i][0]
+        time_start = time.time()    
         for j in range(numbins):       
             h = (Qtot_concat > bin_edges[j]) & (Qtot_concat <= bin_edges[j+1])
-            h_avg, dh_avg = mbar.computeExpectations(h)
-            numerator_avg, dnumerator_avg = mbar.computeExpectations((qi_tanh.transpose())[0]*h)
-            
-            qivsQ[:,i,j] = numerator_avg/h_avg
+            if np.any(h):
+                h = h.astype(float)
+                h_avg, dh_avg = mbar.computeExpectations(h, compute_uncertainty=False)
+                numerator_avg, dnumerator_avg = mbar.computeExpectations((qi_tanh.transpose())[0]*h, compute_uncertainty=False) 
+                qivsQ[:,i,j] = numerator_avg/h_avg
+            else:
+                qivsQ[:,i,j] = np.nan
 
-    return qivsQ, bin_mid
+            print j, time.time() - time_start
+            time_start = time.time()
+
+    return qivsQ, bin_mid, loops
