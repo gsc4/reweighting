@@ -358,8 +358,8 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, 
     Qi_vs_rxn_coord = np.zeros((n_thermo_states, len(pairs), numbins), float)     
     loops = np.zeros(len(pairs), float)
         
-    #for i in range(len(pairs)):
-    for i in [0]:
+    for i in range(len(pairs)):
+    #for i in [0]:
         qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
         qi_tanh = np.concatenate(observables.calculate_observable(trajfiles, qi))
         loops[i] = pairs[i][1] - pairs[i][0]

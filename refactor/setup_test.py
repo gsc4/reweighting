@@ -114,6 +114,18 @@ if __name__ == '__main__':
 
     max_loop = np.max(loops)
     
+    if not os.path.exists('mbar_Qivsr1N'):
+        os.mkdir('mbar_Qivsr1N')
+    os.chdir('mbar_Qivsr1N')
+    
+    for i in range(len(umb_centers_interp) + 1):
+        if i < len(umb_centers_interp):
+            np.save('mbar_Qivsr1N_' + str(umb_centers_interp[i]) + '.npy', Qi_vs_r1N[i,:,:])
+        else:
+            np.save('mbar_Qivsr1N_unbiased.npy', Qi_vs_r1N[i,:,:]) 
+    np.savetxt('centers', umb_centers_interp)
+    np.savetxt('loop', loops)
+    np.savetxt('bin_mid', bin_mid)
     #for i in range(len(qivsr1N)
 
 #    t2 = time.time()
