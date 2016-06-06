@@ -78,15 +78,15 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
     """
     
     dir_name_data_comb = [ i for i in itertools.product(*dir_name_data) ]
-    dir_names = [ name_format.format(*i) for i in dir_name_data_comb ]
+    dir_names = [ dir_name_format.format(*i) for i in dir_name_data_comb ]
 
     E_unbias_concat = []
     rxn_coord_concat = []
     k_umb_all = []
 
-    for dir in dir_names:
+    for i in range(len(dir_names)):
         # Hop into folder with the data
-        os.chdir(dir)
+        os.chdir(dir_names[i])
         
         # Read in k_umb (assuming that there's an empty line at the end of run.mdp) 
         with open('run.mdp','r') as fin:
@@ -130,10 +130,10 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
         rxn_coord_concat.extend([x for y in rxn_coord_data.tolist() for x in y])
 
         # Read in energies
-        energies = np. loadtxt('Etot.dat')   
+        energies = np.loadtxt('Etot.dat', usecols=[1])   
 
-        # Remove biasing potential from total energy 
-        Ebias = .5*k_umb*( (rxn_coord_data - float(umb_centers[i]))**2 )
+        # Remove biasing potential from total energy
+        Ebias = .5*k_umb*( (rxn_coord_data - float(umb_centers[i/n_trials]))**2 )
         E_unbias = [x for y in (energies - Ebias.transpose()).tolist() for x in y]
         E_unbias_concat.extend(E_unbias)
         
@@ -143,8 +143,8 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
 
     k_umb = np.array(k_umb_all[0::n_trials])
 
-    rxn_coord_concat = np.ndarray(rxn_coord_concat)
-    E_unbias_concat = np.ndarray(E_unbias_concat)    
+    rxn_coord_concat = np.array(rxn_coord_concat)
+    E_unbias_concat = np.array(E_unbias_concat)    
 
     return E_unbias_concat, rxn_coord_concat, k_umb,  n_frames
 
@@ -197,12 +197,12 @@ def create_mbar_const_temp(temps, E_concat, n_frames, n_interp=2):
 
     return mbar, T_interp
 
-def create_mbar_umb(umb_centers, E_unbias_concat, n_frames, k_umb, umb_T, n_interp=2):
+def create_mbar_umb(umb_centers, E_unbias_concat, rxn_coord_concat, n_frames, k_umb, umb_T, n_interp=2):
     """
     Constructs mbar for umbrella simulations
 
-    Parametes
-    ---------
+    Parameters
+    ----------
     umb_centers : list of strings
         Umbrella center values for which data was taken
     E_unbias_concat : numpy.ndarray
@@ -226,7 +226,7 @@ def create_mbar_umb(umb_centers, E_unbias_concat, n_frames, k_umb, umb_T, n_inte
         All umbrella centers (including interpolated ones)    
     """
 
-    flt_umb_centers = [ float(x) for x in temps ] 
+    flt_umb_centers = [ float(x) for x in umb_centers ] 
     
     for i in range(len(flt_umb_centers) - 1):
         cent_diff = flt_umb_centers[i+1] - flt_umb_centers[i]
