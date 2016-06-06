@@ -17,7 +17,6 @@ kb_KJ_mol = .0083145
 def read_data_const_temp(name_format, name_data, n_trials=1):
     """
     Reads data from files and concatenates them
-
     Parameters
     ----------
     name_format : string
@@ -26,7 +25,6 @@ def read_data_const_temp(name_format, name_data, n_trials=1):
         Fileame parts to insert into the blank model (state names, trial #, etc.)
     n_trials : int, optional
         Number of trials run at each thermodynamic state
-
     Returns
     -------
     data_long : numpy.ndarray
@@ -51,7 +49,6 @@ def read_data_const_temp(name_format, name_data, n_trials=1):
 def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename, umb_centers, atom_pair, n_trials=1):
     """
     Reads data from files and removes biasing potential
-
     Parameters
     ----------
     dir_name_format : string
@@ -64,7 +61,6 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
         Centers for umbrella biasing potentials
     atom_pair : numpy.ndarray
         For atom pulling umbrellas the indices of the 2 residues being pulled
-
     Returns
     -------
     E_unbias_concat : numpy.ndarray
@@ -162,7 +158,6 @@ def create_mbar_const_temp(temps, E_concat, n_frames, n_interp=2):
         Number of frames considered for each simulation
     n_interp : int, optional
         Number of interpolating points between temperateres in `temps`    
-
     Returns
     -------
     mbar : mbar object
@@ -200,7 +195,6 @@ def create_mbar_const_temp(temps, E_concat, n_frames, n_interp=2):
 def create_mbar_umb(umb_centers, E_unbias_concat, rxn_coord_concat, n_frames, k_umb, umb_T, n_interp=2):
     """
     Constructs mbar for umbrella simulations
-
     Parameters
     ----------
     umb_centers : list of strings
@@ -236,7 +230,7 @@ def create_mbar_umb(umb_centers, E_unbias_concat, rxn_coord_concat, n_frames, k_
     umb_centers_interp = np.array(flt_umb_centers)
 
     # Construct N_k and u_kn
-    N_k = np.zeros(len(umb_centers_iterp)+1)
+    N_k = np.zeros(len(umb_centers_interp)+1)
     u_kn = np.zeros((len(umb_centers_interp) + 1, len(E_unbias_concat)), float)  
     
     beta = 1./(kb_KJ_mol*umb_T)
@@ -245,14 +239,16 @@ def create_mbar_umb(umb_centers, E_unbias_concat, rxn_coord_concat, n_frames, k_
         
         if i < len(umb_centers):
             N_k[i] = n_frames
-            E_bias_i = .5*k_umb[i]*( (rxn_coord_concat - umb_centers_interp)**2 )
+            E_bias_i = .5*k_umb[i]*( (rxn_coord_concat - umb_centers_interp[i])**2 )
         else:
             # For interp points use same k_umb as closest umbrella center with known k_umb
             k_umb_index = min(range(len(umb_centers)), key=lambda x: abs(float(umb_centers[x]) - umb_centers_interp[i]))
-            E_bias_i = .5*k_umb[k_umb_index]*( (rxn_coord_concat - umb_centers_interp)**2 )
+            E_bias_i = .5*k_umb[k_umb_index]*( (rxn_coord_concat - umb_centers_interp[i])**2 )
     
         u_kn[i, :] = beta*(E_unbias_concat + E_bias_i)
-    
+   
+    u_kn[-1, :] = beta*E_unbias_concat
+ 
     mbar = pymbar.MBAR(u_kn, N_k)
 
     return mbar, umb_centers_interp
@@ -260,7 +256,6 @@ def create_mbar_umb(umb_centers, E_unbias_concat, rxn_coord_concat, n_frames, k_
 def calc_Cv(mbar, E_concat, T_interp):
     """
     Calculates heat capacity
-
     Parameters
     ----------
     mbar : mbar object
@@ -289,9 +284,7 @@ def calc_Cv(mbar, E_concat, T_interp):
 def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, numbins=100 ):
 
     """
-
     Lukewarm garbage
-
     """
     
     name_data_comb = [ i for i in itertools.product(*dir_name_data) ]
@@ -303,8 +296,13 @@ def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_con
     for i in dirnames:
         trajfiles.append(i + '/traj.xtc')   
 
-    # Calculate pairwise distances
-    top = dirnames[0] + '/ref.pdb'
+    # Calculate contact distances
+    if os.path.exists(dirnames[0] + '/ref.pdb'):
+        top = dirnames[0] + '/ref.pdb'
+    elif os.path.exists(dirnames[0] + '/ca.pdb'):
+        top = dirnames[0] + '/ca.pdb'
+    else:
+        IOError 
     ref = md.load(top)
     r0 = md.compute_distances(ref, pairs)[0]
     r0_cont = 1.2*r0
@@ -340,8 +338,13 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, 
     for i in dirnames:
         trajfiles.append(i + '/traj.xtc')  
  
-    # Calculate contact
-    top = dirnames[0] + '/ref.pdb'
+    # Calculate contact distances
+    if os.path.exists(dirnames[0] + '/ref.pdb'):
+        top = dirnames[0] + '/ref.pdb'
+    elif os.path.exists(dirnames[0] + '/ca.pdb'):
+        top = dirnames[0] + '/ca.pdb'
+    else:
+        IOError 
     ref = md.load(top)
     r0 = md.compute_distances(ref, pairs)[0]
     r0_cont = 1.2*r0
@@ -355,11 +358,12 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, 
     Qi_vs_rxn_coord = np.zeros((n_thermo_states, len(pairs), numbins), float)     
     loops = np.zeros(len(pairs), float)
         
-    for i in range(len(pairs)):
+    #for i in range(len(pairs)):
+    for i in [0]:
         qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
         qi_tanh = np.concatenate(observables.calculate_observable(trajfiles, qi))
         loops[i] = pairs[i][1] - pairs[i][0]
-#        time_start = time.time()
+        time_start = time.time()
     
         for j in range(numbins):       
             h = (rxn_coord_concat > bin_edges[j]) & (rxn_coord_concat <= bin_edges[j+1])
@@ -371,7 +375,7 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, 
             else:
                 Qi_vs_rxn_coord[:,i,j] = np.nan
 
-#            print j, time.time() - time_start
-#            time_start = time.time()
+            print j, time.time() - time_start
+            time_start = time.time()
 
     return Qi_vs_rxn_coord, bin_mid, loops
