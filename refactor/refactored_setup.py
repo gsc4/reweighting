@@ -38,6 +38,8 @@ def read_data_const_temp(name_format, name_data, n_trials=1):
     
     if name_data[-1][0] in ('Q.dat', 'qtanh.dat'):
         data = np.array([ np.loadtxt(name_format.format(*i)) for i  in name_data_comb ])
+    elif name_data[-1][0] in ('Q.npy', 'qtanh.npy'):
+        data = np.array([ np.load(name_format.format(*i)) for i  in name_data_comb ])
     else:
         data = np.array([ np.loadtxt(name_format.format(*i), usecols=[1]) for i in name_data_comb ])
 
@@ -101,9 +103,12 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
                     try:
                         k_umb = float(word)
                     except ValueError:
-                        raise IOError('Couldn\'t find umbmrella params or get k_umb from run.mdp')
-    
-        k_umb_all.append(k_umb)
+                        None
+
+        try:
+            k_umb_all.append(k_umb)
+        except NameError:
+            raise IOError('Couldn\'t find umbmrella params or get k_umb from run.mdp')
 
         if rxn_coord_filename == 'r1N.npy':
             # Read distances from file, if file doesn't exist, make one
@@ -382,8 +387,8 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, 
     Qi_vs_rxn_coord = np.zeros((n_thermo_states, len(pairs), numbins), float)     
     loops = np.zeros(len(pairs), float)
         
-    for i in range(len(pairs)):
-    #for i in [0]:
+    #for i in range(len(pairs)):
+    for i in [0]:
         qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
         qi_tanh = np.concatenate(np.array(observables.calculate_observable(trajfiles, qi))[:,frame_toss:,:])
         loops[i] = pairs[i][1] - pairs[i][0]
