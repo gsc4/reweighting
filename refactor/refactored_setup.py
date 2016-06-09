@@ -3,11 +3,12 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import pymbar
 import itertools
 import time
+import fnmatch
 
 import mdtraj as md
+import pymbar
 
 import simulation.calc.observables as observables
 
@@ -80,18 +81,27 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
     rxn_coord_concat = []
     k_umb_all = []
 
+    frame_toss = 0
+
     for i in range(len(dir_names)):
         # Hop into folder with the data
         os.chdir(dir_names[i])
         
-        # Read in k_umb (assuming that there's an empty line at the end of run.mdp) 
-        with open('run.mdp','r') as fin:
-            k_umb_line = list(fin)[-2]
-            for word in k_umb_line.split():
-                try:
-                    k_umb = float(word)
-                except ValueError:
-                    None
+        if os.path.exists('umbrella_params'):
+            with open('umbrella_params') as fin:
+                params = fin.readline().split()
+            k_umb = float(params[1])
+            frame_toss = float(params[4])/1000
+ 
+        else:
+            # Read in k_umb (assuming that there's an empty line at the end of run.mdp) 
+            with open('run.mdp','r') as fin:
+                k_umb_line = list(fin)[-2]
+                for word in k_umb_line.split():
+                    try:
+                        k_umb = float(word)
+                    except ValueError:
+                        raise IOError('Couldn\'t find umbmrella params or get k_umb from run.mdp')
     
         k_umb_all.append(k_umb)
 
@@ -119,18 +129,31 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
                 qtanhsum_obs = observables.TanhContactSum(top, pairs, r0_cont, widths)
                 rxn_coord_data = observables.calculate_observables('traj.xtc', qtanhsum_obs)
                 np.save(rxn_coord_filename, r1N)
+            elif fnmatch.fnmatch(rxn_coord_filename, '*.npy'):
+                rxn_coord_data = np.load(rxn_coord_filename)
             else:
                 rxn_coord_data = np.loadtxt(rxn_coord_filename)
 
-        # Add all distances to list
-        rxn_coord_concat.extend([x for y in rxn_coord_data.tolist() for x in y])
+        # Add all rxn coord data to list
+        if isinstance(rxn_coord_data, np.ndarray) and (rxn_coord_data.ndim == 1):
+            rxn_coord_concat.extend([ x for x in rxn_coord_data.tolist()])
+        else:
+            rxn_coord_concat.extend([x for y in rxn_coord_data.tolist() for x in y])
 
         # Read in energies
-        energies = np.loadtxt('Etot.dat', usecols=[1])   
+        if os.path.exists('Etot.dat'):    
+            energies = np.loadtxt('Etot.dat', usecols=[1])[frame_toss:]   
+        elif os.path.exists('Epot.dat'):
+            energies = np.loadtxt('Epot.dat', usecols=[1])[frame_toss:]
+        else:
+            raise IOError('Couldn\'t locate an engergy file')
 
         # Remove biasing potential from total energy
         Ebias = .5*k_umb*( (rxn_coord_data - float(umb_centers[i/n_trials]))**2 )
-        E_unbias = [x for y in (energies - Ebias.transpose()).tolist() for x in y]
+        if (Ebias.ndim == 1) and (energies.ndim == 1):
+            E_unbias = (energies - Ebias).tolist()
+        else: 
+            E_unbias = [x for y in (energies - Ebias.transpose()).tolist() for x in y]
         E_unbias_concat.extend(E_unbias)
         
         os.chdir('..')
@@ -142,7 +165,7 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
     rxn_coord_concat = np.array(rxn_coord_concat)
     E_unbias_concat = np.array(E_unbias_concat)    
 
-    return E_unbias_concat, rxn_coord_concat, k_umb,  n_frames
+    return E_unbias_concat, rxn_coord_concat, k_umb,  n_frames, frame_toss
 
 def create_mbar_const_temp(temps, E_concat, n_frames, n_interp=2):
     """
@@ -290,7 +313,7 @@ def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_con
     name_data_comb = [ i for i in itertools.product(*dir_name_data) ]
     dirnames = [ dir_name_format.format(*i) for i in name_data_comb ] 
     
-    pairs = np.loadtxt(prot_name + '.contacts', dtype=int) - 1
+    pairs = np.loadtxg(prot_name + '.contacts', dtype=int) - 1
  
     trajfiles = []
     for i in dirnames:
@@ -302,7 +325,7 @@ def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_con
     elif os.path.exists(dirnames[0] + '/ca.pdb'):
         top = dirnames[0] + '/ca.pdb'
     else:
-        IOError 
+        raise IOError('Couldn\'t locate .pdb file') 
     ref = md.load(top)
     r0 = md.compute_distances(ref, pairs)[0]
     r0_cont = 1.2*r0
@@ -327,7 +350,7 @@ def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_con
         
     return Qi_vs_rxn_coord, bin_mid, loops
 
-def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, n_thermo_states, mbar, numbins=100):
+def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, n_thermo_states, mbar, numbins=100, frame_toss=0):
     
     name_data_comb = [ i for i in itertools.product(*dir_name_data) ]
     dirnames = [ dir_name_format.format(*i) for i in name_data_comb ] 
@@ -344,7 +367,8 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, 
     elif os.path.exists(dirnames[0] + '/ca.pdb'):
         top = dirnames[0] + '/ca.pdb'
     else:
-        IOError 
+        raise IOError('Couldn\'t locate pdb file')
+    
     ref = md.load(top)
     r0 = md.compute_distances(ref, pairs)[0]
     r0_cont = 1.2*r0
@@ -361,7 +385,7 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, 
     for i in range(len(pairs)):
     #for i in [0]:
         qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
-        qi_tanh = np.concatenate(observables.calculate_observable(trajfiles, qi))
+        qi_tanh = np.concatenate(np.array(observables.calculate_observable(trajfiles, qi))[:,frame_toss:,:])
         loops[i] = pairs[i][1] - pairs[i][0]
         time_start = time.time()
     
