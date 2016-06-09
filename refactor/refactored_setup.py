@@ -15,7 +15,7 @@ import simulation.calc.observables as observables
 global kb_kJ_mol
 kb_KJ_mol = .0083145
 
-def read_data_const_temp(name_format, name_data, n_trials=1):
+def read_data_const_temp(name_format, name_data, n_trials=1, frame_toss=0):
     """
     Reads data from files and concatenates them
     Parameters
@@ -26,6 +26,8 @@ def read_data_const_temp(name_format, name_data, n_trials=1):
         Fileame parts to insert into the blank model (state names, trial #, etc.)
     n_trials : int, optional
         Number of trials run at each thermodynamic state
+    frame_toss : int,optional
+        Number of frames to toss from beginning of data
     Returns
     -------
     data_long : numpy.ndarray
@@ -36,16 +38,31 @@ def read_data_const_temp(name_format, name_data, n_trials=1):
 
     name_data_comb = [ i for i in itertools.product(*name_data) ]   
     
-    if name_data[-1][0] in ('Q.dat', 'qtanh.dat'):
+    if name_data[-1][0] in ('Etot.dat', 'Etot.xvg'):
+        data = np.array([ np.loadtxt(name_format.format(*i), usecols=[1]) for i in name_data_comb ])
+    elif  fnmatch.fnmatch(name_data[-1][0], '*.dat'):
         data = np.array([ np.loadtxt(name_format.format(*i)) for i  in name_data_comb ])
-    elif name_data[-1][0] in ('Q.npy', 'qtanh.npy'):
+    elif fnmatch.fnmatch(name_data[-1][0], '*.npy'):
         data = np.array([ np.load(name_format.format(*i)) for i  in name_data_comb ])
     else:
-        data = np.array([ np.loadtxt(name_format.format(*i), usecols=[1]) for i in name_data_comb ])
+        raise IOError('File does not exist or it cannot be read')        
 
+    if not frame_toss == 0:
+    
+        # slice data off of longest axis
+        sorted_axis_lengths = np.argsort(data.shape)
+        longest_axis = sorted_axis_lengths[-1]
+        if longest_axis == 0:
+            data = data[frame_toss:]
+        elif longest_axis == 1:
+            data = data[:,frame_toss:]
+            data = np.concatenate(data)
+        else:
+            raise IOError('The data you loaded in is completely messed up')
+        
     data_concat = np.concatenate(data)
 
-    n_frames = data.shape[1]*n_trials
+    n_frames = np.max(data.shape)*n_trials
 
     return data_concat, n_frames
 
@@ -115,7 +132,7 @@ def read_data_umb(dir_name_format, dir_name_data, prot_name, rxn_coord_filename,
             if not os.path.exists(rxn_coord_filename):
                 traj = md.load('traj.xtc', top='conf.gro')
                 rxn_coord_data = md.compute_distances(traj, atom_pair)
-                np.save(rxn_coord_filename, r1N)
+                np.save(rxn_coord_filename, rxn_coord_data)
             else: 
                 rxn_coord_data = np.load(rxn_coord_filename)
         
@@ -387,20 +404,23 @@ def mbar_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_concat, 
     Qi_vs_rxn_coord = np.zeros((n_thermo_states, len(pairs), numbins), float)     
     loops = np.zeros(len(pairs), float)
         
-    #for i in range(len(pairs)):
-    for i in [0]:
+    for i in range(len(pairs)):
+    #for i in [0]:
         qi = observables.TanhContacts(ref, np.array([pairs[i]]), r0_cont[i], width)
         qi_tanh = np.concatenate(np.array(observables.calculate_observable(trajfiles, qi))[:,frame_toss:,:])
         loops[i] = pairs[i][1] - pairs[i][0]
+        #import pdb
+        #pdb.set_trace()
         time_start = time.time()
     
-        for j in range(numbins):       
+        for j in range(numbins):
             h = (rxn_coord_concat > bin_edges[j]) & (rxn_coord_concat <= bin_edges[j+1])
             if np.any(h):
                 h = h.astype(float)
                 h_avg, dh_avg = mbar.computeExpectations(h, compute_uncertainty=False)
                 numerator_avg, dnumerator_avg = mbar.computeExpectations((qi_tanh.transpose())[0]*h, compute_uncertainty=False) 
                 Qi_vs_rxn_coord[:,i,j] = numerator_avg/h_avg
+                #pdb.set_trace()
             else:
                 Qi_vs_rxn_coord[:,i,j] = np.nan
 
