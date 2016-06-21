@@ -1,7 +1,5 @@
 import os
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import itertools
 import time
@@ -335,7 +333,7 @@ def empirical_spaghetti(dir_name_format, dir_name_data, prot_name, rxn_coord_con
     name_data_comb = [ i for i in itertools.product(*dir_name_data) ]
     dirnames = [ dir_name_format.format(*i) for i in name_data_comb ] 
     
-    pairs = np.loadtxg(prot_name + '.contacts', dtype=int) - 1
+    pairs = np.loadtxt(prot_name + '.contacts', dtype=int) - 1
  
     trajfiles = []
     for i in dirnames:
